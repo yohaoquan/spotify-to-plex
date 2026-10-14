@@ -8,6 +8,10 @@ export function compareTitles(a?: string, b?: string, twoWayContain: boolean = f
     const searchA = createSearchString(a);
     const searchB = createSearchString(b);
 
+    // Nothing left to compare (e.g. a title made only of symbols) is not a match
+    if (!searchA || !searchB)
+        return { match: false, contains: false, similarity: 0 }
+
     const match = searchA.localeCompare(searchB, "en", { sensitivity: "base", ignorePunctuation: false }) === 0;
 
     const similarity = stringSimilarity(searchA, searchB);

@@ -14,7 +14,9 @@ export function createSearchString(input: string) {
         .replace(new RegExp(/œ/g), "oe")
         .replace(new RegExp(/[ùúûü]/g), "u")
         .replace(new RegExp(/[ýÿ]/g), "y")
-        .replace(/[^\d a-z]/g, "")
+        // Keep letters and digits of every script: an ASCII-only class reduced
+        // CJK, Cyrillic, Greek, etc. titles to an empty string
+        .replace(/[^\p{L}\p{N} ]/gu, "")
         .trim();
 
     return result;

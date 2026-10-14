@@ -58,7 +58,7 @@ export function extractVersion(title: string, filterOutWords: string[]): string 
 
             return result
                 .replace(YEAR, ' ')
-                .replace(/[^\d a-z]/g, '')
+                .replace(/[^\p{L}\p{N} ]/gu, '')
                 .replace(/\s+/g, ' ')
                 .trim();
         })
