@@ -38,6 +38,12 @@ describe('compareTitles', () => {
         expect(result.similarity).toBe(0);
     });
 
+    it('matches Simplified and Traditional spellings of the same title', () => {
+        expect(compareTitles('我愛南京', '我爱南京').match).toBe(true);
+        expect(compareTitles('城裡的月光', '城里的月光').match).toBe(true);
+        expect(compareTitles('焦邁奇', '焦迈奇').match).toBe(true);
+    });
+
     it('still matches Latin titles as before', () => {
         expect(compareTitles('Café', 'Cafe').match).toBe(true);
     });

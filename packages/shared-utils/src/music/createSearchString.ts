@@ -1,8 +1,9 @@
 /* eslint-disable unicorn/prefer-string-replace-all */
-
+import { toSimplified } from './chineseScript';
 
 export function createSearchString(input: string) {
-    const result = input
+    // Simplified and Traditional Chinese spellings of the same title compare equal
+    const result = toSimplified(input)
         .toLowerCase()
         .replace(new RegExp(/[àáâãäå]/g), "a")
         .replace(new RegExp(/æ/g), "ae")
