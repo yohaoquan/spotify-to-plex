@@ -1,6 +1,7 @@
 import getAlbumTracks from "../../actions/getAlbumTracks";
 import hubSearch from "../../actions/hubSearch";
 import { HubSearchResult } from "../../types/actions/HubSearchResult";
+import { chineseVariants } from "@spotify-to-plex/shared-utils/music/chineseScript";
 
 export async function searchForTrack(uri: string, token: string, artist: string, track: string, _album: string = '') {
     const search = `${artist} ${track}`;
@@ -19,6 +20,16 @@ export async function searchForTrack(uri: string, token: string, artist: string,
     // Search for artist name
     {
         const alternativeSearchResult = await hubSearch(uri, token, artist, 50);
+        alternativeSearchResult.forEach(item => {
+            if (searchResult.filter(existingItem => existingItem.guid == item.guid).length == 0)
+                searchResult.push(item);
+        });
+    }
+
+    // Plex search does not fold Simplified and Traditional Chinese: also query
+    // the other spelling of the title and the artist
+    for (const alternative of [...chineseVariants(track).slice(1), ...chineseVariants(artist).slice(1)]) {
+        const alternativeSearchResult = await hubSearch(uri, token, alternative, 50);
         alternativeSearchResult.forEach(item => {
             if (searchResult.filter(existingItem => existingItem.guid == item.guid).length == 0)
                 searchResult.push(item);
