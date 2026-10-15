@@ -1,7 +1,7 @@
 import { generateError } from '@/helpers/errors/generateError';
 import { getLidarrSettings } from '@spotify-to-plex/plex-config/functions/getLidarrSettings';
-import { LidarrAddAlbumRequest } from '@spotify-to-plex/shared-types/lidarr/LidarrAddAlbumRequest';
 import { getMusicBrainzIds } from '@spotify-to-plex/shared-utils/lidarr/getMusicBrainzIds';
+import { createAddAlbumRequest } from '@spotify-to-plex/shared-utils/lidarr/createAddAlbumRequest';
 import { lookupLidarrAlbum } from '@spotify-to-plex/shared-utils/lidarr/lookupLidarrAlbum';
 import { monitorAndSearchAlbum } from '@spotify-to-plex/shared-utils/lidarr/monitorAndSearchAlbum';
 import axios from 'axios';
@@ -69,33 +69,11 @@ const router = createRouter<NextApiRequest, NextApiResponse>()
 
             // Step 3: Add to Lidarr
             const baseUrl = settings.url.endsWith('/') ? settings.url.slice(0, -1) : settings.url;
-            const addRequest: LidarrAddAlbumRequest = {
-                foreignAlbumId: lidarrAlbum.foreignAlbumId,
-                title: lidarrAlbum.title,
-                artistId: 0,
-                profileId: settings.quality_profile_id,
+            const addRequest = createAddAlbumRequest(lidarrAlbum, {
                 qualityProfileId: settings.quality_profile_id,
                 metadataProfileId: settings.metadata_profile_id,
-                monitored: true,
-                anyReleaseOk: true,
                 rootFolderPath: settings.root_folder_path,
-                addOptions: {
-                    searchForNewAlbum: true,
-                },
-                artist: {
-                    foreignArtistId: lidarrAlbum.artist.foreignArtistId,
-                    artistName: lidarrAlbum.artist.artistName,
-                    qualityProfileId: settings.quality_profile_id,
-                    metadataProfileId: settings.metadata_profile_id,
-                    rootFolderPath: settings.root_folder_path,
-                    monitored: true,
-                    addOptions: {
-                        monitor: "none",
-                        monitored: true,
-                        searchForMissingAlbums: false,
-                    },
-                },
-            };
+            });
 
             const addUrl = `${baseUrl}/api/v1/album`;
 

@@ -18,8 +18,10 @@ export type LidarrAddAlbumRequest = {
         metadataProfileId: number;
         rootFolderPath: string;
         monitored: boolean;
+        monitorNewItems?: string;
         addOptions?: {
             monitor: string;
+            albumsToMonitor?: string[];
             monitored: boolean;
             searchForMissingAlbums: boolean;
         };

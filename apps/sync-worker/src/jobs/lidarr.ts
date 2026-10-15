@@ -1,7 +1,6 @@
 import { getLidarrSettings } from "@spotify-to-plex/plex-config/functions/getLidarrSettings";
 import { getStorageDir } from "@spotify-to-plex/shared-utils/utils/getStorageDir";
 import { LidarrAlbumData } from "@spotify-to-plex/shared-types/lidarr/LidarrAlbumData";
-import { LidarrAddAlbumRequest } from "@spotify-to-plex/shared-types/lidarr/LidarrAddAlbumRequest";
 import { LidarrSyncLog } from "@spotify-to-plex/shared-types/lidarr/LidarrSyncLog";
 import axios from "axios";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -13,6 +12,7 @@ import { completeSyncType } from "../utils/completeSyncType";
 import { errorSyncType } from "../utils/errorSyncType";
 import { updateSyncTypeProgress } from "../utils/updateSyncTypeProgress";
 import { getMusicBrainzIds } from "@spotify-to-plex/shared-utils/lidarr/getMusicBrainzIds";
+import { createAddAlbumRequest } from "@spotify-to-plex/shared-utils/lidarr/createAddAlbumRequest";
 import { lookupLidarrAlbum } from "@spotify-to-plex/shared-utils/lidarr/lookupLidarrAlbum";
 import { monitorAndSearchAlbum } from "@spotify-to-plex/shared-utils/lidarr/monitorAndSearchAlbum";
 
@@ -163,33 +163,11 @@ export async function syncLidarr() {
                 }
 
                 // STEP 3: Add to Lidarr (this part remains the same)
-                const addRequest: LidarrAddAlbumRequest = {
-                    foreignAlbumId: lidarrAlbum.foreignAlbumId,
-                    title: lidarrAlbum.title,
-                    artistId: 0,
-                    profileId: settings.quality_profile_id,
+                const addRequest = createAddAlbumRequest(lidarrAlbum, {
                     qualityProfileId: settings.quality_profile_id,
                     metadataProfileId: settings.metadata_profile_id,
-                    monitored: true,
-                    anyReleaseOk: true,
                     rootFolderPath: settings.root_folder_path,
-                    addOptions: {
-                        searchForNewAlbum: true,
-                    },
-                    artist: {
-                        foreignArtistId: lidarrAlbum.artist.foreignArtistId,
-                        artistName: lidarrAlbum.artist.artistName,
-                        qualityProfileId: settings.quality_profile_id,
-                        metadataProfileId: settings.metadata_profile_id,
-                        rootFolderPath: settings.root_folder_path,
-                        monitored: true,
-                        addOptions: {
-                            monitor: "none",
-                            monitored: true,
-                            searchForMissingAlbums: false,
-                        },
-                    },
-                };
+                });
 
                 const addUrl = `${baseUrl}/api/v1/album`;
 
