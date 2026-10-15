@@ -41,6 +41,32 @@ export async function monitorAndSearchAlbum(
             );
         }
 
+        // Lidarr only grabs albums of monitored artists. An artist that was unmonitored
+        // gets monitored for this album only, not for its future releases.
+        const artistUrl = `${baseUrl}/api/v1/artist/${existingAlbum.artistId}`;
+        const { data: artist } = await withRetry(
+            () => axios.get<{ monitored: boolean }>(artistUrl, {
+                headers: {
+                    'X-Api-Key': apiKey
+                }
+            })
+        );
+
+        if (!artist.monitored) {
+            await withRetry(
+                () => axios.put(artistUrl, {
+                    ...artist,
+                    monitored: true,
+                    monitorNewItems: 'none'
+                }, {
+                    headers: {
+                        'X-Api-Key': apiKey,
+                        'Content-Type': 'application/json'
+                    }
+                })
+            );
+        }
+
         // Trigger album search to start download
         const commandUrl = `${baseUrl}/api/v1/command`;
         await withRetry(
