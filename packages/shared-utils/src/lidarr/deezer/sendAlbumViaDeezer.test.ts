@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getDeezerAlbumByUpc, upcVariants } from './getDeezerAlbumByUpc';
-import { findLidarrArtist, sendAlbumViaDeezer } from './sendAlbumViaDeezer';
+import { albumBaseTitle, findLidarrArtist, matchAlbumTitle, normalizeAlbumTitle, sendAlbumViaDeezer } from './sendAlbumViaDeezer';
 
 const options = {
     lidarrUrl: 'http://lidarr:8686/',
@@ -74,7 +74,44 @@ describe('findLidarrArtist', () => {
     });
 });
 
+describe('matchAlbumTitle', () => {
+    const albums = [
+        { title: 'In a Perfect World' },
+        { title: 'Dried Flowers Chinese Version' },
+        { title: '想念' }
+    ];
+
+    it('drops edition notes only when the exact title has no match', () => {
+        expect(matchAlbumTitle(albums, ['In A Perfect World (Expanded Edition)'], normalizeAlbumTitle)).toBeNull();
+        expect(matchAlbumTitle(albums, ['In A Perfect World (Expanded Edition)'], albumBaseTitle)?.title).toBe('In a Perfect World');
+        expect(albumBaseTitle('万物生长（豪华版）')).toBe(albumBaseTitle('萬物生長'));
+    });
+
+    it('keeps version notes that are a different recording', () => {
+        expect(matchAlbumTitle(albums, ['想念（Rehearsal Version）'], albumBaseTitle)).toBeNull();
+        expect(matchAlbumTitle(albums, ['Dried Flowers（English ver.）'], albumBaseTitle)).toBeNull();
+    });
+});
+
 describe('sendAlbumViaDeezer', () => {
+    it('says a Various Artists compilation isn\'t listed instead of asking for a link', async () => {
+        mockGet([
+            [/api\.deezer\.com/, { ...deezerAlbum, artist: { id: 5080, name: 'Various Artists' } }],
+            [/api\/v1\/album\?foreignAlbumId=/, []],
+            [/api\/v1\/artist$/, [{ id: 4, artistName: 'Various Artists', foreignArtistId: '89ad4ac3-39f7-470e-963a-56509c546377', links: [] }]],
+            [/api\/v1\/command\/\d+/, { status: 'completed' }],
+            [/api\/v1\/album\?artistId=4/, []]
+        ]);
+        vi.spyOn(axios, 'post').mockResolvedValue({ data: { id: 31 } });
+
+        const result = await sendAlbumViaDeezer({ upc: '9555150782074' }, options);
+
+        expect(result.status).toBe('not_found');
+        expect(result.message).toContain('compilation credited to Various Artists');
+        expect(result.message).not.toContain('musicbrainz.org');
+        vi.restoreAllMocks();
+    });
+
     afterEach(() => {
         vi.restoreAllMocks();
     });
