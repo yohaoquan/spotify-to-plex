@@ -4,6 +4,9 @@ import { getMusicBrainzIds } from '@spotify-to-plex/shared-utils/lidarr/getMusic
 import { createAddAlbumRequest } from '@spotify-to-plex/shared-utils/lidarr/createAddAlbumRequest';
 import { lookupLidarrAlbum } from '@spotify-to-plex/shared-utils/lidarr/lookupLidarrAlbum';
 import { monitorAndSearchAlbum } from '@spotify-to-plex/shared-utils/lidarr/monitorAndSearchAlbum';
+import { sendAlbumViaDeezer } from '@spotify-to-plex/shared-utils/lidarr/deezer/sendAlbumViaDeezer';
+import { getSpotifyAlbumIdentifiers } from '@spotify-to-plex/shared-utils/spotify/getSpotifyAlbumIdentifiers';
+import { SpotifyApi } from '@spotify/web-api-ts-sdk';
 import axios from 'axios';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createRouter } from 'next-connect';
@@ -49,9 +52,26 @@ const router = createRouter<NextApiRequest, NextApiResponse>()
             // Step 1: Get MusicBrainz IDs (with fallback using artist/album names)
             const musicBrainzIds = await getMusicBrainzIds(spotify_album_id, artist_name, album_name);
             if (!musicBrainzIds) {
-                return res.status(404).json({
-                    success: false,
-                    message: `No MusicBrainz mapping found for Spotify album: ${spotify_album_id}`,
+                // Not in MusicBrainz: try the same release on Deezer (needs Tubifarry in Lidarr)
+                const spotifyApi = SpotifyApi.withClientCredentials(process.env.SPOTIFY_API_CLIENT_ID ?? '', process.env.SPOTIFY_API_CLIENT_SECRET ?? '');
+                const identifiers = await getSpotifyAlbumIdentifiers(spotifyApi, spotify_album_id);
+                const deezer = await sendAlbumViaDeezer({
+                    upc: identifiers.upc,
+                    spotifyArtistId: identifiers.artistId,
+                    spotifyArtistName: identifiers.artistName ?? artist_name,
+                }, {
+                    lidarrUrl: settings.url,
+                    apiKey,
+                    qualityProfileId: settings.quality_profile_id,
+                    metadataProfileId: settings.metadata_profile_id,
+                    rootFolderPath: settings.root_folder_path,
+                });
+
+                const httpStatus = { success: 200, not_found: 404, error: 500 }[deezer.status];
+
+                return res.status(httpStatus).json({
+                    success: deezer.status === 'success',
+                    message: deezer.message,
                 });
             }
 
