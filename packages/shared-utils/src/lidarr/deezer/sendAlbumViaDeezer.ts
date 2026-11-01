@@ -56,6 +56,8 @@ type MusicBrainzUrlArtistResponse = {
 };
 
 const MUSICBRAINZ_ID = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
+const VARIOUS_ARTISTS_MBID = '89ad4ac3-39f7-470e-963a-56509c546377';
+const VARIOUS_ARTISTS_DEEZER = 5080;
 
 export function normalizeArtistName(name: string) {
     return toSimplified(name).toLowerCase()
@@ -93,17 +95,36 @@ export function normalizeAlbumTitle(title: string) {
         .replace(/[\s\p{P}\p{S}]+/gu, '');
 }
 
-/**
- * The artist's album with the same title (Simplified/Traditional folded, punctuation and
- * " - EP"/" - Single" ignored). Only a single, unambiguous match counts.
- */
-async function findAlbumByTitle(baseUrl: string, headers: Record<string, string>, artistId: number, titles: string[]) {
-    const wanted = new Set(titles.filter(Boolean).map(normalizeAlbumTitle)
+// A trailing "(Deluxe Edition)", "[Remastered]", "（Expanded Edition）" and the like
+const EDITION_NOTE = /\s*[(（[【][^()（）[\]【】]*(?:deluxe|expanded|edition|remaster|anniversary|bonus|版)[^()（）[\]【】]*[)）\]】]\s*$/iu;
+
+/** The title without edition notes, so "In A Perfect World (Expanded Edition)" matches "In a Perfect World". */
+export function albumBaseTitle(title: string) {
+    let base = title.replace(/\s+-\s+(?:ep|single)$/i, '');
+    while (EDITION_NOTE.test(base))
+        base = base.replace(EDITION_NOTE, '');
+
+    return normalizeAlbumTitle(base);
+}
+
+/** The single album whose title, normalized with `normalize`, is one of the wanted ones. */
+export function matchAlbumTitle<T extends { title: string }>(albums: T[], titles: string[], normalize: (title: string) => string) {
+    const wanted = new Set(titles.filter(Boolean).map(normalize)
         .filter(Boolean));
-    const { data: albums } = await withRetry(() => axios.get<LidarrAlbum[]>(`${baseUrl}/api/v1/album?artistId=${artistId}`, { headers }));
-    const matches = albums.filter(album => wanted.has(normalizeAlbumTitle(album.title)));
+    const matches = albums.filter(album => wanted.has(normalize(album.title)));
 
     return matches.length === 1 ? matches[0] : null;
+}
+
+/**
+ * The artist's album with the same title (Simplified/Traditional folded, punctuation and
+ * " - EP"/" - Single" ignored), or failing that, the same title once edition notes like
+ * "(Expanded Edition)" are dropped. Only a single, unambiguous match counts.
+ */
+async function findAlbumByTitle(baseUrl: string, headers: Record<string, string>, artistId: number, titles: string[]) {
+    const { data: albums } = await withRetry(() => axios.get<LidarrAlbum[]>(`${baseUrl}/api/v1/album?artistId=${artistId}`, { headers }));
+
+    return matchAlbumTitle(albums, titles, normalizeAlbumTitle) ?? matchAlbumTitle(albums, titles, albumBaseTitle);
 }
 
 function trimUrl(url: string) {
@@ -217,7 +238,9 @@ export async function sendAlbumViaDeezer(input: DeezerFallbackInput, options: De
         const deezerLink = new RegExp(`deezer\\.com/(?:[a-z]{2}/)?artist/${deezerAlbum.artistId}\\b`);
         const linked = (artist.links ?? []).some(link => deezerLink.test(link.url));
         let message = `Deezer album ${deezerAlbum.id} not listed under ${artist.artistName} after a refresh`;
-        if (MUSICBRAINZ_ID.test(artist.foreignArtistId) && !linked)
+        if (artist.foreignArtistId === VARIOUS_ARTISTS_MBID || deezerAlbum.artistId === VARIOUS_ARTISTS_DEEZER)
+            message = `Deezer album ${deezerAlbum.id} is a compilation credited to Various Artists, which Lidarr doesn't list`;
+        else if (MUSICBRAINZ_ID.test(artist.foreignArtistId) && !linked)
             message = `Deezer album ${deezerAlbum.id} not listed under ${artist.artistName}: add https://www.deezer.com/artist/${deezerAlbum.artistId} to https://musicbrainz.org/artist/${artist.foreignArtistId}`;
 
         return { ...result, status: 'not_found', message };
