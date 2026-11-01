@@ -1,3 +1,4 @@
 export type PlaylistUpdateData = {
-    title: string;
+    title?: string;
+    summary?: string;
 }

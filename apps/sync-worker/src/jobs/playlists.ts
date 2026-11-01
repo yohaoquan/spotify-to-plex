@@ -21,6 +21,7 @@ import { completeSyncType } from "../utils/completeSyncType";
 import { errorSyncType } from "../utils/errorSyncType";
 import { updateSyncTypeProgress } from "../utils/updateSyncTypeProgress";
 import { loadSpotifyData } from "../utils/loadSpotifyData";
+import { playlistSummary } from "@spotify-to-plex/shared-utils/spotify/playlistSummary";
 import { putPlexPlaylist } from "../utils/putPlexTracks";
 import { getSettings } from "@spotify-to-plex/plex-config/functions/getSettings";
 import { LidarrAlbumData } from "@spotify-to-plex/shared-types/lidarr/LidarrAlbumData";
@@ -142,7 +143,8 @@ export async function syncPlaylists() {
                 ////////////
                 // Put plex playlist
                 ////////////
-                await putPlexPlaylist(id, plexPlaylist, result, title, data.image)
+                const summary = playlistSummary('description' in data ? data.description : undefined, uri)
+                await putPlexPlaylist(id, plexPlaylist, result, title, data.image, summary)
 
                 ////////////
                 // Handle missing tracks

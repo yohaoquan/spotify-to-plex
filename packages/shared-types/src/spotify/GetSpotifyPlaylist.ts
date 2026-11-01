@@ -7,6 +7,7 @@ export type GetSpotifyPlaylist = {
     private?: boolean
     user_id?: string
     title: string;
+    description?: string;
     user_title?: string
     image: string;
     owner: string;

@@ -12,6 +12,7 @@ export async function getSpotifyPlaylist(api: SpotifyApi, id: string, simplified
             type: "spotify-playlist",
             id: result.id,
             title: result.name,
+            description: result.description || '',
             owner: result.owner?.display_name || 'Unknown',
             image: result.images?.[0]?.url || '',
             tracks: []
