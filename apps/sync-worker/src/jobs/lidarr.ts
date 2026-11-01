@@ -151,6 +151,7 @@ export async function syncLidarr() {
                         upc: identifiers.upc,
                         spotifyArtistId: identifiers.artistId,
                         spotifyArtistName: identifiers.artistName ?? album.artist_name,
+                        albumName: album.album_name,
                     }, {
                         lidarrUrl: settings.url,
                         apiKey,

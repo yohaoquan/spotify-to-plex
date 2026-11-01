@@ -105,7 +105,8 @@ describe('sendAlbumViaDeezer', () => {
             [/api\.deezer\.com/, deezerAlbum],
             [/api\/v1\/album\?foreignAlbumId=/, []],
             [/api\/v1\/artist$/, [{ id: 4, artistName: '宋冬野', foreignArtistId: '08c7741c-1285-4f84-86fe-7afde5cdb82a', links: [] }]],
-            [/api\/v1\/command\/\d+/, { status: 'completed' }]
+            [/api\/v1\/command\/\d+/, { status: 'completed' }],
+            [/api\/v1\/album\?artistId=4/, [{ ...lidarrAlbum, foreignAlbumId: 'rg-x', title: '安和桥北' }]]
         ]);
         const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { id: 31 } });
 
@@ -115,6 +116,25 @@ describe('sendAlbumViaDeezer', () => {
         expect(result.status).toBe('not_found');
         expect(result.message).toContain('https://www.deezer.com/artist/11327094');
         expect(result.message).toContain('https://musicbrainz.org/artist/08c7741c-1285-4f84-86fe-7afde5cdb82a');
+    });
+
+    it('monitors the already-listed copy when MetaMix skipped the Deezer one as a duplicate title', async () => {
+        mockGet([
+            [/api\.deezer\.com/, { ...deezerAlbum, title: '萬物生長 - EP' }],
+            [/api\/v1\/album\?foreignAlbumId=555@deezer/, []],
+            [/api\/v1\/artist$/, [{ id: 4, artistName: '宋冬野', foreignArtistId: '08c7741c-1285-4f84-86fe-7afde5cdb82a', links: [{ url: 'https://www.deezer.com/artist/11327094' }] }]],
+            [/api\/v1\/command\/\d+/, { status: 'completed' }],
+            [/api\/v1\/album\?artistId=4/, [{ ...lidarrAlbum, foreignAlbumId: 'rg-1', title: '万物生长' }, { ...lidarrAlbum, foreignAlbumId: 'rg-2', title: '安和桥北' }]],
+            [/api\/v1\/album\?foreignAlbumId=rg-1/, [{ ...lidarrAlbum, foreignAlbumId: 'rg-1' }]],
+            [/api\/v1\/artist\/4/, { id: 4, monitored: true }]
+        ]);
+        vi.spyOn(axios, 'put').mockResolvedValue({ data: {} });
+        vi.spyOn(axios, 'post').mockResolvedValue({ data: { id: 31 } });
+
+        const result = await sendAlbumViaDeezer({ upc: '9555150782074' }, options);
+
+        expect(result).toMatchObject({ status: 'success', foreignAlbumId: 'rg-1' });
+        expect(result.message).toContain('matched by title to rg-1');
     });
 
     it('adds a Deezer-only artist unmonitored for new items, refreshes, then monitors the album', async () => {

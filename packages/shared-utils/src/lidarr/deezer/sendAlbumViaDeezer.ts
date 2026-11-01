@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { toSimplified } from '../../music/chineseScript';
-import { getLidarrAlbum } from '../getLidarrAlbum';
+import { getLidarrAlbum, type LidarrAlbum } from '../getLidarrAlbum';
 import { monitorAndSearchAlbum } from '../monitorAndSearchAlbum';
 import { musicBrainzGet } from '../utils/musicBrainzGet';
 import { withRetry } from '../utils/withRetry';
@@ -21,6 +21,8 @@ export type DeezerFallbackInput = {
     upc?: string;
     spotifyArtistId?: string;
     spotifyArtistName?: string;
+    /** Spotify's album title, also used to find the album among the artist's releases */
+    albumName?: string;
 };
 
 export type DeezerFallbackOptions = {
@@ -83,6 +85,25 @@ export function findLidarrArtist(artists: LidarrArtist[], spotifyArtistId: strin
     const wanted = new Set(names.filter(Boolean).map(normalizeArtistName));
 
     return artists.find(artist => wanted.has(normalizeArtistName(artist.artistName)));
+}
+
+export function normalizeAlbumTitle(title: string) {
+    return toSimplified(title).toLowerCase()
+        .replace(/\s+-\s+(?:ep|single)$/, '')
+        .replace(/[\s\p{P}\p{S}]+/gu, '');
+}
+
+/**
+ * The artist's album with the same title (Simplified/Traditional folded, punctuation and
+ * " - EP"/" - Single" ignored). Only a single, unambiguous match counts.
+ */
+async function findAlbumByTitle(baseUrl: string, headers: Record<string, string>, artistId: number, titles: string[]) {
+    const wanted = new Set(titles.filter(Boolean).map(normalizeAlbumTitle)
+        .filter(Boolean));
+    const { data: albums } = await withRetry(() => axios.get<LidarrAlbum[]>(`${baseUrl}/api/v1/album?artistId=${artistId}`, { headers }));
+    const matches = albums.filter(album => wanted.has(normalizeAlbumTitle(album.title)));
+
+    return matches.length === 1 ? matches[0] : null;
 }
 
 function trimUrl(url: string) {
@@ -187,23 +208,28 @@ export async function sendAlbumViaDeezer(input: DeezerFallbackInput, options: De
     if (!await waitForCommand(baseUrl, headers, command.id, options))
         return { ...result, status: 'error', message: `Refreshing ${artist.artistName} in Lidarr didn't finish` };
 
-    if (!await getLidarrAlbum(foreignAlbumId, baseUrl, options.apiKey)) {
-        const onMusicBrainz = MUSICBRAINZ_ID.test(artist.foreignArtistId);
+    // MetaMix skips a Deezer release whose title matches one already listed (usually the
+    // MusicBrainz copy, which just lacks a Spotify link), so look for that one too
+    const target = await getLidarrAlbum(foreignAlbumId, baseUrl, options.apiKey)
+        ?? await findAlbumByTitle(baseUrl, headers, artist.id, [deezerAlbum.title, input.albumName ?? '']);
 
-        return {
-            ...result,
-            status: 'not_found',
-            message: onMusicBrainz
-                ? `Deezer album ${deezerAlbum.id} not listed under ${artist.artistName}: add https://www.deezer.com/artist/${deezerAlbum.artistId} to https://musicbrainz.org/artist/${artist.foreignArtistId} (or a release with a similar title is already listed)`
-                : `Deezer album ${deezerAlbum.id} not listed under ${artist.artistName} after a refresh`,
-        };
+    if (!target) {
+        const deezerLink = new RegExp(`deezer\\.com/(?:[a-z]{2}/)?artist/${deezerAlbum.artistId}\\b`);
+        const linked = (artist.links ?? []).some(link => deezerLink.test(link.url));
+        let message = `Deezer album ${deezerAlbum.id} not listed under ${artist.artistName} after a refresh`;
+        if (MUSICBRAINZ_ID.test(artist.foreignArtistId) && !linked)
+            message = `Deezer album ${deezerAlbum.id} not listed under ${artist.artistName}: add https://www.deezer.com/artist/${deezerAlbum.artistId} to https://musicbrainz.org/artist/${artist.foreignArtistId}`;
+
+        return { ...result, status: 'not_found', message };
     }
 
-    const monitored = await monitorAndSearchAlbum(foreignAlbumId, baseUrl, options.apiKey);
+    const monitored = await monitorAndSearchAlbum(target.foreignAlbumId, baseUrl, options.apiKey);
+    const via = target.foreignAlbumId === foreignAlbumId ? 'Deezer' : `Deezer barcode, matched by title to ${target.foreignAlbumId}`;
 
     return {
         ...result,
+        foreignAlbumId: target.foreignAlbumId,
         status: monitored.success ? 'success' : 'error',
-        message: `Deezer${added ? `, artist added (${artist.foreignArtistId})` : ''}: ${monitored.message}`,
+        message: `${via}${added ? `, artist added (${artist.foreignArtistId})` : ''}: ${monitored.message}`,
     };
 }

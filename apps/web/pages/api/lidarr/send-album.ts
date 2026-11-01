@@ -59,6 +59,7 @@ const router = createRouter<NextApiRequest, NextApiResponse>()
                     upc: identifiers.upc,
                     spotifyArtistId: identifiers.artistId,
                     spotifyArtistName: identifiers.artistName ?? artist_name,
+                    albumName: album_name,
                 }, {
                     lidarrUrl: settings.url,
                     apiKey,
