@@ -3,13 +3,14 @@ import { putPlaylistPoster } from "@spotify-to-plex/plex-helpers/playlist/putPla
 import { removeItemsFromPlaylist } from "@spotify-to-plex/plex-helpers/playlist/removeItemsFromPlaylist";
 import { storePlaylist } from "@spotify-to-plex/plex-helpers/playlist/storePlaylist";
 import { updatePlaylist } from "@spotify-to-plex/plex-helpers/playlist/updatePlaylist";
+import { PlaylistUpdateData } from "@spotify-to-plex/plex-helpers/PlaylistUpdateData";
 import { getPlexUri } from "@spotify-to-plex/plex-helpers/utils/getPlexUri";
 import { Playlist } from "@spotify-to-plex/shared-types/plex/Playlist";
 import { SearchResponse } from "@spotify-to-plex/plex-music-search/types/SearchResponse";
 import { getSettings } from "@spotify-to-plex/plex-config/functions/getSettings";
 import { addPlaylist } from "@spotify-to-plex/plex-config/functions/addPlaylist";
 
-export async function putPlexPlaylist(id: string, plexPlaylist: Playlist | undefined | null, result: SearchResponse[], title: string, thumb: string) {
+export async function putPlexPlaylist(id: string, plexPlaylist: Playlist | undefined | null, result: SearchResponse[], title: string, thumb: string, summary?: string) {
     const plexTracks = result.map(item => {
         if (item.result.length == 0)
             return null;
@@ -45,8 +46,15 @@ export async function putPlexPlaylist(id: string, plexPlaylist: Playlist | undef
             // Add all items
             await addItemsToPlaylist(settings, plexPlaylist.ratingKey, plexTracks);
 
+            const changes: PlaylistUpdateData = {};
             if (plexPlaylist.title != title && title)
-                await updatePlaylist(settings, plexPlaylist.ratingKey, { title });
+                changes.title = title;
+
+            if (summary !== undefined && plexPlaylist.summary != summary)
+                changes.summary = summary;
+
+            if (Object.keys(changes).length > 0)
+                await updatePlaylist(settings, plexPlaylist.ratingKey, changes);
 
             try {
                 await putPlaylistPoster(plexPlaylist.ratingKey, thumb)
@@ -58,6 +66,8 @@ export async function putPlexPlaylist(id: string, plexPlaylist: Playlist | undef
             const uri = getPlexUri(settings, firstItem.key, firstItem.source);
             const playlistId = await storePlaylist(settings, title, uri);
             await addItemsToPlaylist(settings, playlistId, plexTracks);
+            if (summary)
+                await updatePlaylist(settings, playlistId, { summary });
 
             try {
                 await putPlaylistPoster(playlistId, thumb)
