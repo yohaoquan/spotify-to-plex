@@ -24,7 +24,8 @@ export async function putPlexPlaylist(id: string, plexPlaylist: Playlist | undef
     }).filter(item => !!item);
 
     if (plexTracks.length > 0) {
-        const firstItem = plexTracks.shift();
+        // Not shift(): an existing playlist is cleared and refilled with every track, the first included
+        const [firstItem] = plexTracks;
         if (!firstItem)
             return;
 
@@ -57,7 +58,7 @@ export async function putPlexPlaylist(id: string, plexPlaylist: Playlist | undef
             console.log(`Create new playlist`);
             const uri = getPlexUri(settings, firstItem.key, firstItem.source);
             const playlistId = await storePlaylist(settings, title, uri);
-            await addItemsToPlaylist(settings, playlistId, plexTracks);
+            await addItemsToPlaylist(settings, playlistId, plexTracks.slice(1));
 
             try {
                 await putPlaylistPoster(playlistId, thumb)
