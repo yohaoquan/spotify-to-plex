@@ -15,6 +15,9 @@ import { getMusicBrainzIds } from "@spotify-to-plex/shared-utils/lidarr/getMusic
 import { createAddAlbumRequest } from "@spotify-to-plex/shared-utils/lidarr/createAddAlbumRequest";
 import { lookupLidarrAlbum } from "@spotify-to-plex/shared-utils/lidarr/lookupLidarrAlbum";
 import { monitorAndSearchAlbum } from "@spotify-to-plex/shared-utils/lidarr/monitorAndSearchAlbum";
+import { sendAlbumViaDeezer } from "@spotify-to-plex/shared-utils/lidarr/deezer/sendAlbumViaDeezer";
+import { getSpotifyAlbumIdentifiers } from "@spotify-to-plex/shared-utils/spotify/getSpotifyAlbumIdentifiers";
+import { SpotifyApi } from "@spotify/web-api-ts-sdk";
 
 export async function syncLidarr() {
     console.log('Starting Lidarr sync...');
@@ -82,6 +85,11 @@ export async function syncLidarr() {
         const { putLog, logComplete } = getNestedSyncLogsForType('lidarr');
         const syncLog = putLog('lidarr-sync', 'Lidarr Sync');
 
+        const spotifyApi = SpotifyApi.withClientCredentials(
+            process.env.SPOTIFY_API_CLIENT_ID ?? '',
+            process.env.SPOTIFY_API_CLIENT_SECRET ?? ''
+        );
+
         // Read existing Lidarr logs
         const lidarrLogsPath = join(getStorageDir(), 'lidarr_sync_log.json');
         const lidarrLogs: Record<string, LidarrSyncLog> = {};
@@ -137,10 +145,29 @@ export async function syncLidarr() {
                 const musicBrainzIds = await getMusicBrainzIds(album.spotify_album_id, album.artist_name, album.album_name);
 
                 if (!musicBrainzIds) {
-                    albumLog.status = 'not_found';
-                    albumLog.error = 'No MusicBrainz mapping found';
+                    // Not in MusicBrainz: try the same release on Deezer (needs Tubifarry in Lidarr)
+                    const identifiers = await getSpotifyAlbumIdentifiers(spotifyApi, album.spotify_album_id);
+                    const deezer = await sendAlbumViaDeezer({
+                        upc: identifiers.upc,
+                        spotifyArtistId: identifiers.artistId,
+                        spotifyArtistName: identifiers.artistName ?? album.artist_name,
+                    }, {
+                        lidarrUrl: settings.url,
+                        apiKey,
+                        qualityProfileId: settings.quality_profile_id,
+                        metadataProfileId: settings.metadata_profile_id,
+                        rootFolderPath: settings.root_folder_path,
+                    });
+
+                    albumLog.status = deezer.status;
+                    albumLog.error = deezer.status === 'success' ? undefined : deezer.message;
+                    albumLog.message = deezer.message;
+                    albumLog.deezer_album_id = deezer.deezerAlbumId;
+                    albumLog.source = 'deezer';
                     albumLog.end = Date.now();
-                    notFoundCount++;
+                    successCount += deezer.status === 'success' ? 1 : 0;
+                    notFoundCount += deezer.status === 'not_found' ? 1 : 0;
+                    errorCount += deezer.status === 'error' ? 1 : 0;
                     lidarrLogs[logId] = albumLog;
                     continue;
                 }
